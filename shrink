@@ -1,0 +1,55 @@
+#!/usr/bin/perl
+
+# Basic idea: measure the dimensions, then pick good sizes for
+# smaller pictures and thumbnails, and then shrink/crop.
+
+use strict;
+
+my $tx = 160; # thumbnail width
+my $ty = 100; # thumbnail height
+my $mm = 800; # small dimension for medium-sized
+
+my $tprefix = "t_";
+my $mprefix = "m_";
+my @files = ();
+
+while ($_ = shift) {
+    if (/^-tx$/) {
+        $tx = shift;
+    } elsif (/^-ty$/) {
+        $ty = shift;
+    } elsif (/^-mm$/) {
+        $mm = shift;
+    } elsif (/^-tp$/) {
+        $tprefix = shift;
+    } elsif (/^-mp$/) {
+        $mprefix = shift;
+    } elsif (/^-/) {
+        die "unrecognized option $_";
+    } else {
+        push @files, $_;
+    }
+}
+
+foreach (@files) {
+    my $mf = $mprefix . $_;
+    !-e $mf or die "$mf: already exists";
+    my $tf = $tprefix . $_;
+    !-e $tf or die "$tf: already exists";
+    `identify $_` =~ /\s(\d+)x(\d+)\s/ or die "$_: not a picture";
+    my ($x, $y, $mx, $my) = ($1, $2, $mm, $mm);
+    if ($x < $y) {
+        $my = int($y * $mm / $x);
+    } else {
+        $mx = int($x * $mm / $y);
+    }
+    print "mx=$mx my=$my\n";
+    my ($sx, $sy) = ($tx / $x, $ty / $y);
+    my $ts = $sx > $sy ? $sx : $sy;
+    ($sx, $sy) = (int($ts * $x), int($ts * $y));
+    my $cx = $sx > $tx ? int(($sx - $tx) / 2) : 0;
+    my $cy = $sy > $ty ? int(($sy - $ty) / 2) : 0;
+    print "$_: ${x}x$y -> ${mx}x${my} -> ${sx}x$sy -> ${tx}x$ty+$cx+$cy\n";
+    system "convert $_ -geometry ${mx}x$my $mf";
+    system "convert $_ -geometry ${sx}x$sy -crop ${tx}x$ty+$cx+$cy $tf";
+}

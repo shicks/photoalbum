@@ -1,0 +1,155 @@
+body {
+    margin: 0px;
+    width: 100%;
+    height: 100%;
+    background: #b0d0ff;
+    font-family: arial, sans;
+}
+
+h1 {
+    font-size: 200%;
+    text-align: left;
+    margin-top: 0.3em;
+    margin-left: 1em;
+    margin-bottom: 0em;
+}
+
+.main {
+    margin-left: 1em;
+    margin-top: 0.4em;
+    margin-bottom: 1em;
+    padding: 0.5em;
+    background: white;
+}
+
+.copyright {
+    font-size: 75%;
+    margin-top: -1em;
+    padding-top: 0em;
+    padding-left: 1.5em;
+}
+
+a img { /* firefox wants to put a border... */
+    border: 0px;
+}
+
+/* Gallery view */
+
+.gallery .main {
+    width: 500px;
+    border: 1px solid #000080;
+}
+
+.gallery .row {
+    clear: left;
+    display: block;
+    padding: 0.5em;
+}
+
+.album-cover {
+    float: left;
+    padding-right: 1em;
+}
+
+.album-title {
+    padding-left: 1em;
+    line-height: 100px;
+}
+
+/* Album view */
+
+.album .main {
+    width: 880px;
+    border: 1px solid #000080;
+}
+
+.album .row {
+    clear: left;
+    display: block;
+    padding-bottom: 1em;
+    /* margin-top: 1em;*/
+}
+
+.album .item {
+    float: left;
+    padding: 0.5em;
+    /* margin-bottom: 1em;*/
+}
+
+.links {
+    clear: both;
+    display: block;
+    padding: 0.5em;
+    font-size: 85%
+}
+
+.right {
+    float: right;
+    padding-right: 1em;
+}
+
+/* Photo view */
+
+body.photo {
+    background: white;
+}
+
+.photo h1 {
+    margin-top: 0px;
+    padding-top: 0.3em;
+    margin-left: -2em;
+    padding-left: 3em;
+    padding-bottom: 0.3em;
+    width: 100%;
+    background: #b0d0ff;
+    border-bottom: 1px solid #000080;
+}
+
+.photo .main {
+    width: 900px;
+}
+
+/* Comments section */
+
+.comments {
+    font-size: 85%;
+}
+
+#comment-text {
+    font-family: arial, sans;
+    width: 450px;
+    height: 5em;
+}
+
+#submit-comment {
+    display: block;
+}
+
+.comments .likes .person {
+    display: inline;
+    font-weight: bold;
+}
+
+.comments .wrapper {
+    padding: 1px 0px;
+}
+
+.comment, .comments .likes {
+    background: #d0e0ff;
+    padding: 4px;
+    width: 500px;
+}
+
+.comment .person {
+    float: left;
+    font-weight: bold;
+}
+
+.comment .text {
+    display: inline;
+    text-height: 101%;
+}
+
+.comment .date {
+    color: #555;
+}
