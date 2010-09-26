@@ -3,14 +3,23 @@
 # Basic idea: measure the dimensions, then pick good sizes for
 # smaller pictures and thumbnails, and then shrink/crop.
 
+# Need to use exif utility, grep for Orientation -> jpegtran in place
+#  - "right - top" means we need to rotate right 90
+#  - "top - left" is normal
+#  - "left - bottom" means we need to rotate left 90
+#  - ??? bottom - right is 180???
+
 use strict;
+use File::Basename qw/dirname basename/;
 
 my $tx = 160; # thumbnail width
-my $ty = 100; # thumbnail height
-my $mm = 800; # small dimension for medium-sized
+my $ty = 120; # thumbnail height
+my $mm = 800; # small dimension for medium-sized (UNUSED)
+my $mx = 900; # medium width
+my $movieOverlay = dirname($0) . "/movie-overlay.png";
 
-my $tprefix = "t_";
-my $mprefix = "m_";
+my $tprefix = "t/t_";
+my $mprefix = "m/m_";
 my @files = ();
 
 while ($_ = shift) {
@@ -18,8 +27,8 @@ while ($_ = shift) {
         $tx = shift;
     } elsif (/^-ty$/) {
         $ty = shift;
-    } elsif (/^-mm$/) {
-        $mm = shift;
+    } elsif (/^-mx$/) {
+        $mx = shift;
     } elsif (/^-tp$/) {
         $tprefix = shift;
     } elsif (/^-mp$/) {
@@ -31,25 +40,77 @@ while ($_ = shift) {
     }
 }
 
+system "mkdir -p ".dirname($tprefix) unless -d dirname($tprefix);
+system "mkdir -p ".dirname($mprefix) unless -d dirname($mprefix);
+
 foreach (@files) {
-    my $mf = $mprefix . $_;
-    !-e $mf or die "$mf: already exists";
-    my $tf = $tprefix . $_;
-    !-e $tf or die "$tf: already exists";
-    `identify $_` =~ /\s(\d+)x(\d+)\s/ or die "$_: not a picture";
-    my ($x, $y, $mx, $my) = ($1, $2, $mm, $mm);
-    if ($x < $y) {
-        $my = int($y * $mm / $x);
+    if (/\.mp4$/) {
+        my $thm = $_;
+        # deal with video files too! (medium = flv, thumbnail = jpg)
+        my $tf = $tprefix . $_;
+        $tf =~ s/mp4$/jpg/;
+        !-e $tf or die "$tf: already exists";
+        my $mf = $mprefix . $_;
+        $mf =~ s/mp4$/jpg/;
+        !-e $mf or die "$mf: already exists";
+        my $mv = $mprefix . $_;
+        $mv =~ s/mp4$/flv/;
+        !-e $mf or die "$mv: already exists";
+        # First make the thumbnail
+        my $mpout = "00000001.jpg";
+        unlink $mpout if -e $mpout;
+        system "mplayer -frames 1 -vo jpeg -nosound $_";
+        `identify $mpout` =~ /\s(\d+)x(\d+)\s/ or die "$_: not a picture";
+        my ($x, $y) = ($1, $2);
+        # (copied from below)
+        my ($sx, $sy) = ($tx / $x, $ty / $y);
+        my $ts = $sx > $sy ? $sx : $sy;
+        ($sx, $sy) = (int($ts * $x), int($ts * $y));
+        my $cx = $sx > $tx ? int(($sx - $tx) / 2) : 0;
+        my $cy = $sy > $ty ? int(($sy - $ty) / 2) : 0;
+        #
+        my $opts = "$movieOverlay -gravity center -composite -format jpg";
+        system "convert $mpout -geometry ${sx}x$sy -crop ${tx}x$ty+$cx+$cy $opts $tf";
+        # Now make the FLV (and still shot)
+        # See http://forum.doom9.org/archive/index.php/t-140045.html
+        system "mencoder $_ -o $mv -of lavf -oac mp3lame -lameopts abr:br=56 -ovc lavc -lavcopts vcodec=flv:vbitrate=800:mbd=2:mv0:trell:v4mv:cbp:last_pred=3 -vf scale=640:360 -srate 22050";
+        system "convert $mpout -geometry 640x360 $mf";
+        unlink $mpout;
     } else {
-        $mx = int($x * $mm / $y);
+        system "jhead -ft -autorot $_ > /dev/null"; # idempotent
+        my $mf = $mprefix . $_;
+        !-e $mf or die "$mf: already exists";
+        my $tf = $tprefix . $_;
+        !-e $tf or die "$tf: already exists";
+        `identify $_` =~ /\s(\d+)x(\d+)\s/ or die "$_: not a picture";
+        ### Previous version - constrains largest dim to $mm:
+        # my ($x, $y, $mx, $my) = ($1, $2, $mm, $mm);
+        # if ($x < $y) {
+        #     $my = int($y * $mx / $x);
+        # } else {
+        #     $mx = int($x * $mm / $y);
+        # }
+        my ($x, $y) = ($1, $2);
+        my $my = int($y * $mx / $x);
+        my ($sx, $sy) = ($tx / $x, $ty / $y);
+        my $ts = $sx > $sy ? $sx : $sy;
+        ($sx, $sy) = (int($ts * $x), int($ts * $y));
+        my $cx = $sx > $tx ? int(($sx - $tx) / 2) : 0;
+        my $cy = $sy > $ty ? int(($sy - $ty) / 2) : 0;
+        if (-e "$_.crop") { # allow manually adjusting crops
+            `cat $_.crop` =~ /\+(\d+)\+(\d+)/ or die "bad crop spec: $_.crop";
+            ($cx, $cy) = ($1, $2);
+        }
+        print "$_: ${x}x$y -> ${mx}x${my} -> ${sx}x$sy -> ${tx}x$ty+$cx+$cy\n";
+        my $tmp = "tmp." . basename($mf);
+        system "convert $_ -geometry ${mx}x$my $tmp";
+        system "exif -r --output $mf $tmp";
+        my $badexit = $?;
+        unlink $tmp;
+        system "convert $_ -geometry ${sx}x$sy -crop ${tx}x$ty+$cx+$cy $tmp";
+        system "exif --remove --output $tf $tmp";
+        $badexit |= $?;
+        unlink $tmp;
+        die "error" if $badexit;
     }
-    print "mx=$mx my=$my\n";
-    my ($sx, $sy) = ($tx / $x, $ty / $y);
-    my $ts = $sx > $sy ? $sx : $sy;
-    ($sx, $sy) = (int($ts * $x), int($ts * $y));
-    my $cx = $sx > $tx ? int(($sx - $tx) / 2) : 0;
-    my $cy = $sy > $ty ? int(($sy - $ty) / 2) : 0;
-    print "$_: ${x}x$y -> ${mx}x${my} -> ${sx}x$sy -> ${tx}x$ty+$cx+$cy\n";
-    system "convert $_ -geometry ${mx}x$my $mf";
-    system "convert $_ -geometry ${sx}x$sy -crop ${tx}x$ty+$cx+$cy $tf";
 }
