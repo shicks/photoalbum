@@ -26,10 +26,15 @@
 #   a_<alb>/COVER = name of cover photo (thumbnail)
 #   a_<alb>/m/m_<photo>.jpg = mid-sized
 #   a_<alb>/t/t_<photo>.jpg = thumbnail
-#   c/<alb>_<photo> = comments
+#   c/<alb>_<photo>.comment = comments
+#   c/<alb>_<photo>.desc = photo description (same fmt as comments, uses 1st)
 
+ini_set("magic_quotes_gpc", "off");
+ini_set("magic_quotes_sybase", "off");
 $GLOBALS['PERPAGE'] = 50;
 $GLOBALS['PERROW'] = 5;
+
+$GLOBALS['WRITE_DESCRIPTION'] = false;
 
 function printHeader($title, $class) {
   print "<html><head><title>$title</title>\n"
@@ -48,7 +53,7 @@ function listAlbums() {
       $album = substr($f, 2);
       $description = getAlbumDescription($album);
       $cover = file_get_contents("$f/COVER");
-      $thumb = "$f/t/t_$cover";
+      $thumb = "$f/" . thumbnail($cover);
       $gal[$album] = "<div class='row'><a href='?a=$album'><div "
          . "class='album-cover'><img src='$thumb'/></div><div "
          . "class='album-title'>$description</div></a></div>";
@@ -58,19 +63,34 @@ function listAlbums() {
   foreach ($gal as $album => $html) {
     print "$html\n";
   }
-  print "</div></div><div class='copyright'>Photo gallery software &copy; "
-    . "2010 Stephen Hicks.  All rights reserved.</div></body></html>";
+  print "<div style='clear:both'></div>\n";
+  print "</div><div class='copyright'>Photo gallery software &copy; "
+    . "2010 Stephen Hicks.  All rights reserved.</div></div></body></html>";
 }
 
 function getAlbumDescription($album) {
   return file_get_contents("a_$album/NAME");
 }
 
+function getPhotoDescription($album, $photo) {
+  $descFile = "c/${album}_$photo.desc";
+  if (!file_exists($descFile)) {
+    return "";
+  }
+  $lines = file($descFile);
+  $line = $lines[0];
+  $parts = explode("&", trim($line));
+  if ($parts[0] != "comment") {
+    return "";
+  }
+  return str_replace("\n", "<br/>", urldecode($parts[5]));
+}
+
 function getPhotoList($album) {
   $dir = opendir("a_$album");
   $photos = array();
   while ($f = readdir($dir)) {
-    if (strpos($f, ".jpg") !== false) {
+    if (strpos($f, ".jpg") !== false || strpos($f, ".mp4") !== false) {
       array_push($photos, $f);
     }
   }
@@ -98,17 +118,21 @@ function listPhotos() {
       print "<div class='row'>\n";
     }
     $photo = $photos[$i];
+    $thumbnail = thumbnail($photo);
     print "<div class='item'>"
       . "<a href='?a=$alb&p=$photo'><img class='thumbnail' "
-      . "src='a_$alb/t/t_$photo'/></a></div>\n";
+      . "src='a_$alb/$thumbnail'/></a></div>\n";
     if ($i % $PERROW == $PERROW - 1) {
       print "</div>\n";
     }
   }
   print "<div class='links bottom'>";
   paginate($alb, $page, $pages);
+  print "</div>\n";
   showComments($alb);
-  print "</div></div>\n";
+  print "</div>\n";
+  print "</div></div><div class='copyright'>Photo gallery software &copy; "
+    . "2010 Stephen Hicks.  All rights reserved.</div></body></html>";
 }
 
 function paginate($alb, $page, $pages) {
@@ -134,6 +158,20 @@ function paginate($alb, $page, $pages) {
   }
 }
 
+function thumbnail($photo) {
+  return "t/t_" . str_replace(".mp4", ".jpg", $photo);
+}
+
+function embed($album, $photo, $next) {
+  if (strpos($photo, ".jpg") !== false) { # picture
+    print "<div class='img'><a href='?a=$album&p=$next'>"
+    . "<img src='a_$album/m/m_$photo'></a></div>\n";
+  } else if (strpos($photo, ".mp4") !== false) { # video
+    $flv = str_replace(".mp4", ".flv", $photo);
+    embedVideo("a_$album/m/m_$flv");
+  }
+}
+
 function showPhoto() {
   $alb = $_REQUEST['a'];
   $photo = $_REQUEST['p'];
@@ -147,7 +185,7 @@ function showPhoto() {
     
   printHeader("${alb}_$photo", "photo");
   print "<input type='hidden' id='info' value='${alb}_$photo'>\n";
-  print "<h1>$description</h1><div class='main'>"
+  print "<h1><a href='?a=$alb'>$description</a></h1><div class='main'>"
     . "<div class='links'>\n";
   $total = count($photos);
   $prev = $photos[($ind + $total - 1) % $total];
@@ -155,15 +193,20 @@ function showPhoto() {
   print "<div class='right'><a href='?a=$alb&p=$prev'>Previous</a>"
     . "&nbsp;&nbsp;<a href='?a=$alb&p=$next'>Next</a></div>";
   $oneind = $ind + 1;
+  $page = floor($ind / $GLOBALS['PERPAGE']);
   print "Photo $oneind of $total&nbsp&nbsp"
     . "<a href='a_$alb/$photo'>Full Size</a> - "
-    . "<a href='?a=$alb'>Back to Album</a> - "
+    . "<a href='?a=$alb&pg=$page'>Back to Album</a> - "
     . "<a href='?'>All Albums</a></div>\n"; # </photo-links>
-  print "<div class='img'><a href='?a=$alb&p=$next'>"
-    . "<img src='a_$alb/m/m_$photo'></a></div>\n";
+  embed($alb, $photo, $next);
+  $desc = getPhotoDescription($alb, $photo);
+  if ($desc) {
+    print "<div class='description'>$desc</div>\n";
+  }
   # load comments
   showComments("${alb}_$photo");
-  print "</div></div></body></html>";
+  print "</div></div><div class='copyright'>Photo gallery software &copy; "
+    . "2010 Stephen Hicks.  All rights reserved.</div></body></html>";
 }
 
 function showComments($id) {
@@ -172,12 +215,11 @@ function showComments($id) {
   $likes = array();
   $comments = array();
   foreach ($lines as $line) {
-    $parts = explode(":", trim($line)); # special escape &#58; for colon
-    $name = $parts[1];      # note: htmlspecialchars($string, ENT_QUOTES);
+    $parts = explode("&", trim($line));
+    $name = urldecode($parts[1]);
     # $email = $parts[2];   # also escape \n as &lb;, then replace w/ <br/>
-    $href = $parts[3];
+    $href = urldecode($parts[3]);
     if ($href) {
-      $href = colonUnescape($href);
       if (strpos($href, "http://") !== 0) {
         $href = "http://$href";
       }
@@ -189,7 +231,7 @@ function showComments($id) {
       $time = $parts[4];
       $year = $time < time() - 320 * 86400 ? ", Y" : "";
       $date = date("F j$year \\a\\t g:ia", $time); # use JS too...?
-      $text = $parts[5];
+      $text = str_replace("\n", "<br/>", urldecode($parts[5]));
       $comment = "<div class='wrapper'><div class='comment'>\n"
          . "<div class='person'>$name</div>&nbsp;"
          . "<div class='text'>$text</div><div class='date'>$date"
@@ -226,17 +268,35 @@ function showComments($id) {
   foreach ($comments as $comment) {
     print "$comment\n";
   }
-  ?><div class='weapper'><div class='comments-write'>
+  ?><div class='wrapper'><div class='comments-write'>
 <div id='login' style='display:none' class='login'>
 Name:&nbsp;<input id='name'/>
 Email:&nbsp;<input id='email'/>
 Website&nbsp;(optional):&nbsp;<input id='website'/>
 <input type='submit' id='submit-like' value='Like' style='display:none'></div>
 <textarea
-  id='comment-text'>Write a comment...</textarea><div id='comment-button'
-  style='display:none'>
-<input id='submit-comment' type='submit' value='Comment'/></div></div></div>
-<?php
+  id='comment-text'>Write a comment...</textarea><input id='submit-comment'
+  style='display:none' type='submit' value='Comment'/>
+<div style='clear:both'></div>
+</div></div></div><?php
+}
+
+# We hardcode the size here, too...
+function embedVideo($video) {
+  $base = "http://" . $_SERVER['HTTP_HOST']
+    . preg_replace("|/[^/]*$|", "", $_SERVER['PHP_SELF']);
+  $file = "$base/$video";
+  $still = str_replace(".flv", ".jpg", $file);
+  $player = "$base/mediaplayer.swf";
+  print "<object classid='clsid:D27CDB6E-AE6D-11cf-96B8-444553540000' "
+    . "codebase='http://download.macromedia.com/pub/shockwave/cabs"
+    . "/flash/swflash.cab#version=6,0,40,0' "
+    . "width='640' height='380'><param name='flashvars' value='file=$file"
+    . "&image=$still'/>"
+    . "<param name='movie' value='$player'/><embed src='$player' width='640' "
+    . "height='380' type='application/x-shockwave-flash' "
+    . "pluginspage='http://www.macromedia.com/go/getflashplayer' "
+    . "flashvars='file=$file&image=$still'/></object>";
 }
 
 function printError($message) {
@@ -244,34 +304,40 @@ function printError($message) {
       . "<body>Error: $message</body></html>";
 }
 
-function colonUnescape($s) {
-  return str_replace(array("&amp;", "&#58;"), array("&", ":"), $s);
-}
-
-function colonEscape($s) {
-  return str_replace(array("&", ":"), array("&amp;", "&#58;"), $s);
-}
-
 function sanitize($s) {
-  return colonEscape(htmlspecialchars(colonUnescape($s), ENT_QUOTES));
+  return urlencode(htmlspecialchars(urldecode($s), ENT_QUOTES));
 }
 
+function sanitizeUrl($s) {
+  return urlencode(str_replace(array("'", "<", ">"), array("", "", ""),
+                               urldecode($s)));
+}
+
+function unslash($s) {
+  return str_replace("\\'", "'", $s);
+}
+
+# Sanitize inputs BEFORE saving to file; trust file not monkeyed with...
 function appendComment($type, $text) {
-  $cookie = str_replace(array('&s','&a'), array(';','&'), $_COOKIE['logged']);
-  $parts = explode(":", $cookie);
+  $cookie = unslash($_COOKIE['logged']); # cf. magic_quotes_gpc (_sybase)
+  $parts = explode("&", $cookie);
   $name = sanitize($parts[0]);
   $email = sanitize($parts[1]);
-  $website = sanitize($parts[2]);
+  $website = sanitizeUrl($parts[2]);
   $date = time();
-  $text = sanitize($text);
+  $text = sanitize(unslash($text));
   $fname = $_REQUEST[$type];
   if ($name and $email and ($type=='like' or $text)) {
-    $f = fopen("c/$_REQUEST[$type].comment", 'a');
-    fwrite($f, "$type:$name:$email:$website:$date:$text\n");
+    if ($GLOBALS['WRITE_DESCRIPTION']) {
+      $f = fopen("c/$_REQUEST[$type].desc", 'w');
+    } else {
+      $f = fopen("c/$_REQUEST[$type].comment", 'a');
+    }
+    fwrite($f, "$type&$name&$email&$website&$date&$text\n");
     fclose($f);
-    print "OK: $cookie";
+    print "OK"; # : <$cookie> <$text>";
   } else {
-    print "error: $cookie";
+    print "error: <$cookie> <$text>";
   }
 }
 

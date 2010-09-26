@@ -20,6 +20,7 @@ h1 {
     margin-bottom: 1em;
     padding: 0.5em;
     background: white;
+    border: 1px solid #000080;
 }
 
 .copyright {
@@ -37,7 +38,6 @@ a img { /* firefox wants to put a border... */
 
 .gallery .main {
     width: 500px;
-    border: 1px solid #000080;
 }
 
 .gallery .row {
@@ -52,21 +52,18 @@ a img { /* firefox wants to put a border... */
 }
 
 .album-title {
-    padding-left: 1em;
-    line-height: 100px;
+    line-height: 120px;
 }
 
 /* Album view */
 
 .album .main {
     width: 880px;
-    border: 1px solid #000080;
 }
 
 .album .row {
     clear: left;
     display: block;
-    padding-bottom: 1em;
     /* margin-top: 1em;*/
 }
 
@@ -83,6 +80,15 @@ a img { /* firefox wants to put a border... */
     font-size: 85%
 }
 
+.links.bottom {
+    padding-top: 0em;
+    padding-bottom: 0em;
+}
+
+.album .comments {
+    padding-top: 0em;
+}
+
 .right {
     float: right;
     padding-right: 1em;
@@ -90,6 +96,7 @@ a img { /* firefox wants to put a border... */
 
 /* Photo view */
 
+/*
 body.photo {
     background: white;
 }
@@ -103,26 +110,40 @@ body.photo {
     width: 100%;
     background: #b0d0ff;
     border-bottom: 1px solid #000080;
+    border-right: 1px solid #000080;
+}
+*/
+
+h1 a {
+    text-decoration: none;
+    color: black;
 }
 
 .photo .main {
-    width: 900px;
+    width: 920px;
 }
 
 /* Comments section */
 
 .comments {
     font-size: 85%;
+    padding: 0.5em;
+}
+
+.photo .img {
+    padding: 0.5em;
+}
+
+.photo .description {
+    padding: 0.5em;
 }
 
 #comment-text {
+    float: left;
     font-family: arial, sans;
-    width: 450px;
+    width: 430px;
     height: 5em;
-}
-
-#submit-comment {
-    display: block;
+    padding-bottom: 0.5em;
 }
 
 .comments .likes .person {
