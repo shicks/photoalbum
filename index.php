@@ -45,7 +45,22 @@ function printHeader($title, $class) {
 
 function listAlbums() {
   printHeader("Albums", "gallery");
-  print "<h1>Albums</h1><div class='main'>\n";
+  print "<h1>Albums</h1><div class='main'>\n"
+    . "<div class='links top'>"
+    . "<a href='?activity=1'>Recent Activity</a></div>\n";
+  foreach (getAlbumList() as $album => $info) {
+    $cover = $info['cover'];
+    $desc = $info['desc'];
+    print "<div class='row'><a href='?a=$album'><div "
+         . "class='album-cover'><img src='$cover'/></div><div "
+         . "class='album-title'>$desc</div></a></div>";
+  }
+  print "<div style='clear:both'></div>\n";
+  print "</div><div class='copyright'>Photo gallery software &copy; "
+    . "2010 Stephen Hicks.  All rights reserved.</div></div></body></html>";
+}
+
+function getAlbumList() {
   $dir = opendir(".");
   $gal = array();
   while ($f = readdir($dir)) {
@@ -54,18 +69,11 @@ function listAlbums() {
       $description = getAlbumDescription($album);
       $cover = file_get_contents("$f/COVER");
       $thumb = "$f/" . thumbnail($cover);
-      $gal[$album] = "<div class='row'><a href='?a=$album'><div "
-         . "class='album-cover'><img src='$thumb'/></div><div "
-         . "class='album-title'>$description</div></a></div>";
+      $gal[$album] = array("desc" => $description, "cover" => $thumb);
     }
   }
-  ksort($gal);
-  foreach ($gal as $album => $html) {
-    print "$html\n";
-  }
-  print "<div style='clear:both'></div>\n";
-  print "</div><div class='copyright'>Photo gallery software &copy; "
-    . "2010 Stephen Hicks.  All rights reserved.</div></div></body></html>";
+  krsort($gal);
+  return $gal;
 }
 
 function getAlbumDescription($album) {
@@ -98,6 +106,47 @@ function getPhotoList($album) {
   return $photos;
 }
 
+function getCommentsList() {
+  $gal = getAlbumList();
+  $dir = opendir("c");
+  $activity = array();
+  while ($f = readdir($dir)) {
+    $ext = strpos($f, ".comment");
+    if ($ext !== false) {
+      $lines = file("c/$f");
+      $f = substr($f, 0, $ext);
+      $underscore = strpos($f, "_");
+      if ($underscore === false) {
+        $type = "an <a href='?a=$f'>album</a>";
+      } else {
+        $alb = substr($f, 0, $underscore);
+        $desc = $gal[$alb]['desc'];
+        $photo = substr($f, $underscore + 1);
+        if (strpos($photo, ".mp4") !== false) {
+          $type = "a <a href='?a=$alb&p=$photo'>video</a> in \"$desc\"";
+        } else {
+          $type = "a <a href='?a=$alb&p=$photo'>photo</a> in \"$desc\"";
+        }
+      }
+      foreach ($lines as $line) {
+        $parts = explode("&", trim($line));
+        $name = urldecode($parts[1]);
+        $time = $parts[4];
+        $year = $time < time() - 320 * 86400 ? ", Y" : "";
+        $date = date("F j$year \\a\\t g:ia \\P\\T", $time); # use JS too...?
+        $datetext = "<span class='date'>$date</span>";
+        if ($parts[0] == 'like') {
+          $activity[$time] = "$name likes $type $datetext";
+        } else {
+          $activity[$time] = "$name commented on $type $datetext";
+        }
+      }
+    }
+  }
+  krsort($activity);
+  return $activity;
+}
+
 function listPhotos() {
   global $PERPAGE, $PERROW;
   $alb = $_REQUEST['a'];
@@ -109,8 +158,12 @@ function listPhotos() {
   printHeader("Album: $description", "album");
   print "<input type='hidden' id='info' value='${alb}'>\n";
   print "<h1>$description</h1><div class='main'><div class='links top'>\n";
-  paginate($alb, $page, $pages);
-  print "<a href='?'>All Albums</a></div><div style='clear:both'></div>\n";
+  paginate("a=$alb", $page, $pages);
+  print "<a href='?'>All Albums</a>";
+  if (file_exists("zip/$alb.zip")) {
+    print " - <a href='zip/$alb.zip'>Download Album</a>";
+  }
+  print "</div><div style='clear:both'></div>\n";
   for ($i = $page * $PERPAGE;
       $i < ($page + 1) * $PERPAGE and $i < $total;
       $i++) {
@@ -127,7 +180,7 @@ function listPhotos() {
     }
   }
   print "<div class='links bottom'>";
-  paginate($alb, $page, $pages);
+  paginate("a=$alb", $page, $pages);
   print "</div>\n";
   showComments($alb);
   print "</div>\n";
@@ -135,24 +188,24 @@ function listPhotos() {
     . "2010 Stephen Hicks.  All rights reserved.</div></body></html>";
 }
 
-function paginate($alb, $page, $pages) {
+function paginate($base, $page, $pages) {
   if ($pages > 1) {
     print "<div class='right'>";
     if ($page != 0) {
       $p = $page - 1;
-      print "<a href='?a=$alb&pg=$p'>Previous</a> ";
+      print "<a href='?$base&pg=$p'>Previous</a> ";
     }
     for ($p = 0; $p < $pages; $p++) {
       $pp = $p + 1;
       if ($p == $page) {
         print "<b>$pp</b> ";
       } else {
-        print "<a href='?a=$alb&pg=$p'>$pp</a> ";
+        print "<a href='?$base&pg=$p'>$pp</a> ";
       }
     } 
     if ($page < $pages - 1) {
       $p = $page + 1;
-      print "<a href='?a=$alb&pg=$p'>Next</a>";
+      print "<a href='?$base&pg=$p'>Next</a>";
     }
     print "</div>\n";
   }
@@ -168,7 +221,9 @@ function embed($album, $photo, $next) {
     . "<img src='a_$album/m/m_$photo'></a></div>\n";
   } else if (strpos($photo, ".mp4") !== false) { # video
     $flv = str_replace(".mp4", ".flv", $photo);
+    print "<div class='flv'>";
     embedVideo("a_$album/m/m_$flv");
+    print "</div>\n";
   }
 }
 
@@ -328,7 +383,7 @@ function appendComment($type, $text) {
   $text = sanitize(unslash($text));
   $fname = $_REQUEST[$type];
   if ($name and $email and ($type=='like' or $text)) {
-    if ($GLOBALS['WRITE_DESCRIPTION']) {
+    if ($GLOBALS['WRITE_DESCRIPTION'] && $email=='sdh33%40cornell.edu') {
       $f = fopen("c/$_REQUEST[$type].desc", 'w');
     } else {
       $f = fopen("c/$_REQUEST[$type].comment", 'a');
@@ -341,10 +396,40 @@ function appendComment($type, $text) {
   }
 }
 
+function showActivity() {
+  global $PERPAGE;
+  $page = $_REQUEST['pg'];
+  $activity = getCommentsList();
+  $keys = array_keys($activity);
+  $total = count($keys);
+  $pages = floor(($total - 1) / $PERPAGE) + 1;
+  printHeader("Recent Activity", "activity");
+  print "<h1>Recent Activity</h1><div class='main'>"
+    . "<div class='links top'>\n";
+  paginate("activity=1", $page, $pages);
+  //var_dump($activity);
+  print "<a href='?'>All Albums</a></div><div style='clear:both'></div>\n";
+  for ($i = $page * $PERPAGE;
+      $i < ($page + 1) * $PERPAGE and $i < $total;
+      $i++) {
+    $key = $keys[$i];
+    $item = $activity[$key];
+    print "<div class='item'>$item</div>\n";
+  }
+  print "<div class='links bottom'>";
+  paginate("activity=1", $page, $pages);
+  print "</div>\n";
+  print "</div></div><div class='copyright'>Photo gallery software &copy; "
+    . "2010 Stephen Hicks.  All rights reserved.</div></body></html>";
+
+}
+
 if ($_REQUEST['like']) {
   appendComment("like", "");
 } else if ($_REQUEST['comment']) {
   appendComment("comment", $_REQUEST['text']);
+} else if ($_REQUEST['activity']) {
+  showActivity();
 } else if ($_REQUEST['p']) {
   showPhoto();
 } else if ($_REQUEST['a']) {
