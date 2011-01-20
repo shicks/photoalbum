@@ -33,8 +33,25 @@ ini_set("magic_quotes_gpc", "off");
 ini_set("magic_quotes_sybase", "off");
 $GLOBALS['PERPAGE'] = 50;
 $GLOBALS['PERROW'] = 5;
+$GLOBALS['FACEBOOK_ENABLED'] = true;
 
+# Change this to true to enable OWNER_EMAIL to write descriptions
 $GLOBALS['WRITE_DESCRIPTION'] = false;
+
+# These should be set in config.php
+$GLOBALS['OWNER_EMAIL'] = '';    # note: replace @ with %40
+$GLOBALS['FB_API_KEY'] = '';
+$GLOBALS['FB_SECRET'] = '';
+
+if (file_exists('config.php')) {
+  require_once 'config.php';
+}
+if ($GLOBALS['FACEBOOK_ENABLED'] && file_exists('facebook_api')) {
+  require_once 'facebook_api/facebook_php5_photoslib.php';
+  require_once 'facebook_inc.php'; # sequester all the facebook-specific code
+} else {
+  $GLOBALS['FACEBOOK_ENABLED'] = false;
+}
 
 function printHeader($title, $class) {
   print "<html><head><title>$title</title>\n"
@@ -162,6 +179,9 @@ function listPhotos() {
   print "<a href='?'>All Albums</a>";
   if (file_exists("zip/$alb.zip")) {
     print " - <a href='zip/$alb.zip'>Download Album</a>";
+  }
+  if ($GLOBALS['FACEBOOK_ENABLED']) {
+    print " - <a href='?fb=$alb'>Upload to Facebook</a>";
   }
   print "</div><div style='clear:both'></div>\n";
   for ($i = $page * $PERPAGE;
@@ -383,7 +403,7 @@ function appendComment($type, $text) {
   $text = sanitize(unslash($text));
   $fname = $_REQUEST[$type];
   if ($name and $email and ($type=='like' or $text)) {
-    if ($GLOBALS['WRITE_DESCRIPTION'] && $email=='sdh33%40cornell.edu') {
+    if ($GLOBALS['WRITE_DESCRIPTION'] && $email==$GLOBALS['OWNER_EMAIL']) {
       $f = fopen("c/$_REQUEST[$type].desc", 'w');
     } else {
       $f = fopen("c/$_REQUEST[$type].comment", 'a');
@@ -424,7 +444,9 @@ function showActivity() {
 
 }
 
-if ($_REQUEST['like']) {
+if ($GLOBALS['FACEBOOK_ENABLED'] && $_REQUEST['fb']) {
+  doFacebook();
+} else if ($_REQUEST['like']) {
   appendComment("like", "");
 } else if ($_REQUEST['comment']) {
   appendComment("comment", $_REQUEST['text']);
