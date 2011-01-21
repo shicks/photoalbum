@@ -33,7 +33,7 @@ ini_set("magic_quotes_gpc", "off");
 ini_set("magic_quotes_sybase", "off");
 $GLOBALS['PERPAGE'] = 50;
 $GLOBALS['PERROW'] = 5;
-$GLOBALS['FACEBOOK_ENABLED'] = true;
+$GLOBALS['FACEBOOK_ENABLED'] = false;
 
 # Change this to true to enable OWNER_EMAIL to write descriptions
 $GLOBALS['WRITE_DESCRIPTION'] = false;
@@ -46,6 +46,7 @@ $GLOBALS['FB_SECRET'] = '';
 if (file_exists('config.php')) {
   require_once 'config.php';
 }
+
 if ($GLOBALS['FACEBOOK_ENABLED'] && file_exists('facebook_api')) {
   require_once 'facebook_api/facebook_php5_photoslib.php';
   require_once 'facebook_inc.php'; # sequester all the facebook-specific code
